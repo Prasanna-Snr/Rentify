@@ -3,6 +3,8 @@ class TenantModel {
   final String tenantName;
   final double roomRent; // Required field
   final String ownerId;
+  final String? propertyId; // Reference to property (optional for backward compatibility)
+  final String? propertyName; // Property display name for easy reference
   
   // Optional bills with checkbox flags
   final bool hasWaterBill;
@@ -22,6 +24,8 @@ class TenantModel {
     required this.tenantName,
     required this.roomRent,
     required this.ownerId,
+    this.propertyId,
+    this.propertyName,
     this.hasWaterBill = false,
     this.waterBillAmount,
     this.hasElectricityBill = false,
@@ -38,6 +42,8 @@ class TenantModel {
       tenantName: map['tenantName'] ?? '',
       roomRent: (map['roomRent'] ?? 0).toDouble(),
       ownerId: map['ownerId'] ?? '',
+      propertyId: map['propertyId'],
+      propertyName: map['propertyName'],
       hasWaterBill: map['hasWaterBill'] ?? false,
       waterBillAmount: map['waterBillAmount']?.toDouble(),
       hasElectricityBill: map['hasElectricityBill'] ?? false,
@@ -57,6 +63,8 @@ class TenantModel {
       'tenantName': tenantName,
       'roomRent': roomRent,
       'ownerId': ownerId,
+      'propertyId': propertyId,
+      'propertyName': propertyName,
       'hasWaterBill': hasWaterBill,
       'waterBillAmount': waterBillAmount,
       'hasElectricityBill': hasElectricityBill,
@@ -73,6 +81,8 @@ class TenantModel {
     String? tenantName,
     double? roomRent,
     String? ownerId,
+    String? propertyId,
+    String? propertyName,
     bool? hasWaterBill,
     double? waterBillAmount,
     bool? hasElectricityBill,
@@ -87,6 +97,8 @@ class TenantModel {
       tenantName: tenantName ?? this.tenantName,
       roomRent: roomRent ?? this.roomRent,
       ownerId: ownerId ?? this.ownerId,
+      propertyId: propertyId ?? this.propertyId,
+      propertyName: propertyName ?? this.propertyName,
       hasWaterBill: hasWaterBill ?? this.hasWaterBill,
       waterBillAmount: waterBillAmount ?? this.waterBillAmount,
       hasElectricityBill: hasElectricityBill ?? this.hasElectricityBill,

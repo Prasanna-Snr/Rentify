@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/tenant_model.dart';
+import '../../models/property_model.dart';
 import '../../services/tenant_service.dart';
+import '../../services/property_service.dart';
 import '../../widgets/custom_text_field.dart';
 import '../../widgets/custom_button.dart';
 
@@ -15,6 +17,7 @@ class AddTenantScreen extends StatefulWidget {
 class _AddTenantScreenState extends State<AddTenantScreen> {
   final _formKey = GlobalKey<FormState>();
   final TenantService _tenantService = TenantService();
+  final PropertyService _propertyService = PropertyService();
   
   // Controllers
   final _tenantNameController = TextEditingController();
@@ -23,12 +26,74 @@ class _AddTenantScreenState extends State<AddTenantScreen> {
   final _electricityUnitFeeController = TextEditingController();
   final _garbageBillController = TextEditingController();
   
+  // Property selection
+  List<PropertyModel> _properties = [];
+  PropertyModel? _selectedProperty;
+  bool _showPropertySelection = false;
+  
   // Checkbox states
   bool _hasWaterBill = false;
   bool _hasElectricityBill = false;
   bool _hasGarbageBill = false;
   
   bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProperties();
+  }
+
+  void _loadProperties() async {
+    List<PropertyModel> properties = await _propertyService.getUserProperties();
+    setState(() {
+      _properties = properties;
+      _showPropertySelection = properties.length > 1;
+    });
+
+    // If no properties exist, show dialog and go back
+    if (properties.isEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showNoPropertiesDialog();
+      });
+    }
+  }
+
+  void _showNoPropertiesDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              Icons.warning_amber_rounded,
+              color: Colors.orange,
+              size: 24,
+            ),
+            const SizedBox(width: 8),
+            const Text('No Properties Found'),
+          ],
+        ),
+        content: const Text(
+          'You need to add at least one property before you can add tenants. Please add a property first.',
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context); // Close dialog
+              Navigator.pop(context); // Go back to tenant list
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.deepPurple,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   void dispose() {
@@ -48,11 +113,27 @@ class _AddTenantScreenState extends State<AddTenantScreen> {
     });
 
     try {
+      // Validate property selection if multiple properties exist
+      if (_showPropertySelection && _selectedProperty == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please select a property'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+
       final tenant = TenantModel(
         id: '',
         tenantName: _tenantNameController.text.trim(),
         roomRent: double.parse(_roomRentController.text.trim()),
         ownerId: '',
+        propertyId: _selectedProperty?.id ?? (_properties.isNotEmpty ? _properties.first.id : null),
+        propertyName: _selectedProperty?.displayName ?? (_properties.isNotEmpty ? _properties.first.displayName : null),
         hasWaterBill: _hasWaterBill,
         waterBillAmount: _hasWaterBill && _waterBillController.text.isNotEmpty
             ? double.parse(_waterBillController.text.trim())
@@ -138,6 +219,95 @@ class _AddTenantScreenState extends State<AddTenantScreen> {
                     return null;
                   },
                 ),
+
+                // Property Selection (only show if multiple properties)
+                if (_showPropertySelection) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.withOpacity(0.1),
+                          spreadRadius: 1,
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.home_work,
+                              color: Colors.deepPurple,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Select Property',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.deepPurple,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<PropertyModel>(
+                          value: _selectedProperty,
+                          decoration: InputDecoration(
+                            hintText: 'Choose a property',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(color: Colors.grey.shade300),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(color: Colors.grey.shade300),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(color: Colors.deepPurple),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 16,
+                            ),
+                          ),
+                          items: _properties.map((property) {
+                            return DropdownMenuItem<PropertyModel>(
+                              value: property,
+                              child: Text(
+                                '${property.displayName} (${property.numberOfFlights} flights, ${property.totalRooms} rooms)',
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (PropertyModel? value) {
+                            setState(() {
+                              _selectedProperty = value;
+                            });
+                          },
+                          validator: _showPropertySelection ? (value) {
+                            if (value == null) {
+                              return 'Please select a property';
+                            }
+                            return null;
+                          } : null,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
 
                 // Room Rent (Required)
                 CustomTextField(

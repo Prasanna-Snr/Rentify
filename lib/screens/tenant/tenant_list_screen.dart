@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../models/tenant_model.dart';
+import '../../models/property_model.dart';
 import '../../services/tenant_service.dart';
+import '../../services/property_service.dart';
 import 'add_tenant_screen.dart';
 import 'edit_tenant_screen.dart';
+import '../property/property_list_screen.dart';
 
 class TenantListScreen extends StatefulWidget {
   const TenantListScreen({super.key});
@@ -13,7 +16,9 @@ class TenantListScreen extends StatefulWidget {
 
 class _TenantListScreenState extends State<TenantListScreen> {
   final TenantService _tenantService = TenantService();
+  final PropertyService _propertyService = PropertyService();
   List<TenantModel> _tenants = [];
+  List<PropertyModel> _properties = [];
   bool _isLoading = true;
 
   @override
@@ -27,14 +32,24 @@ class _TenantListScreenState extends State<TenantListScreen> {
       _isLoading = true;
     });
 
+    // Load both tenants and properties
     List<TenantModel> tenants = await _tenantService.getUserTenants();
+    List<PropertyModel> properties = await _propertyService.getUserProperties();
+    
     setState(() {
       _tenants = tenants;
+      _properties = properties;
       _isLoading = false;
     });
   }
 
   void _navigateToAddTenant() async {
+    // Check if properties exist before allowing tenant addition
+    if (_properties.isEmpty) {
+      _showNoPropertiesDialog();
+      return;
+    }
+
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
@@ -45,6 +60,50 @@ class _TenantListScreenState extends State<TenantListScreen> {
     if (result == true) {
       _loadTenants();
     }
+  }
+
+  void _showNoPropertiesDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              Icons.warning_amber_rounded,
+              color: Colors.orange,
+              size: 24,
+            ),
+            const SizedBox(width: 8),
+            const Text('No Properties Found'),
+          ],
+        ),
+        content: const Text(
+          'You need to add at least one property before you can add tenants. Would you like to add a property now?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const PropertyListScreen(),
+                ),
+              ).then((_) => _loadTenants());
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.deepPurple,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Add Property'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _navigateToEditTenant(TenantModel tenant) async {
@@ -119,7 +178,10 @@ class _TenantListScreenState extends State<TenantListScreen> {
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           IconButton(
-            icon: const Icon(Icons.add, color: Colors.white),
+            icon: Icon(
+              Icons.add, 
+              color: _properties.isEmpty ? Colors.grey : Colors.white,
+            ),
             onPressed: _navigateToAddTenant,
           ),
         ],
@@ -128,13 +190,79 @@ class _TenantListScreenState extends State<TenantListScreen> {
           ? const Center(
               child: CircularProgressIndicator(color: Colors.deepPurple),
             )
-          : _tenants.isEmpty
-              ? _buildEmptyState()
-              : _buildTenantList(),
+          : _properties.isEmpty
+              ? _buildNoPropertiesState()
+              : _tenants.isEmpty
+                  ? _buildEmptyState()
+                  : _buildTenantList(),
       floatingActionButton: FloatingActionButton(
         onPressed: _navigateToAddTenant,
-        backgroundColor: Colors.deepPurple,
+        backgroundColor: _properties.isEmpty ? Colors.grey : Colors.deepPurple,
         child: const Icon(Icons.add, color: Colors.white),
+      ),
+    );
+  }
+
+  Widget _buildNoPropertiesState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.home_work_outlined,
+              size: 80,
+              color: Colors.orange[400],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No Properties Found',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[700],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'You need to add at least one property before you can manage tenants.',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[600],
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const PropertyListScreen(),
+                  ),
+                ).then((_) => _loadTenants());
+              },
+              icon: const Icon(Icons.add_home),
+              label: const Text('Add Property First'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.deepPurple,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                'Go Back',
+                style: TextStyle(
+                  color: Colors.grey[600],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -235,6 +363,17 @@ class _TenantListScreenState extends State<TenantListScreen> {
                         ),
                       ),
                       const SizedBox(height: 4),
+                      if (tenant.propertyName != null) ...[
+                        Text(
+                          'Property: ${tenant.propertyName}',
+                          style: TextStyle(
+                            color: Colors.deepPurple,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                      ],
                       Text(
                         'Room Rent: ₹${tenant.roomRent.toStringAsFixed(0)}/month',
                         style: TextStyle(
