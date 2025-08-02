@@ -1,6 +1,7 @@
 class TenantModel {
   final String id;
   final String tenantName;
+  final String phoneNumber; // Required phone number field
   final double roomRent; // Required field
   final String ownerId;
   final String? propertyId; // Reference to property (optional for backward compatibility)
@@ -22,6 +23,7 @@ class TenantModel {
   TenantModel({
     required this.id,
     required this.tenantName,
+    required this.phoneNumber,
     required this.roomRent,
     required this.ownerId,
     this.propertyId,
@@ -40,6 +42,7 @@ class TenantModel {
     return TenantModel(
       id: map['id'] ?? '',
       tenantName: map['tenantName'] ?? '',
+      phoneNumber: map['phoneNumber'] ?? '',
       roomRent: (map['roomRent'] ?? 0).toDouble(),
       ownerId: map['ownerId'] ?? '',
       propertyId: map['propertyId'],
@@ -61,6 +64,7 @@ class TenantModel {
     return {
       'id': id,
       'tenantName': tenantName,
+      'phoneNumber': phoneNumber,
       'roomRent': roomRent,
       'ownerId': ownerId,
       'propertyId': propertyId,
@@ -79,6 +83,7 @@ class TenantModel {
   TenantModel copyWith({
     String? id,
     String? tenantName,
+    String? phoneNumber,
     double? roomRent,
     String? ownerId,
     String? propertyId,
@@ -95,6 +100,7 @@ class TenantModel {
     return TenantModel(
       id: id ?? this.id,
       tenantName: tenantName ?? this.tenantName,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
       roomRent: roomRent ?? this.roomRent,
       ownerId: ownerId ?? this.ownerId,
       propertyId: propertyId ?? this.propertyId,

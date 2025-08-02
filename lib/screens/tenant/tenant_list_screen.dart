@@ -5,6 +5,7 @@ import '../../services/tenant_service.dart';
 import '../../services/property_service.dart';
 import 'add_tenant_screen.dart';
 import 'edit_tenant_screen.dart';
+import 'details/tenant_details_screen.dart';
 import '../property/property_list_screen.dart';
 
 class TenantListScreen extends StatefulWidget {
@@ -104,6 +105,19 @@ class _TenantListScreenState extends State<TenantListScreen> {
         ],
       ),
     );
+  }
+
+  void _navigateToTenantDetails(TenantModel tenant) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TenantDetailsScreen(tenant: tenant),
+      ),
+    );
+
+    if (result == true) {
+      _loadTenants();
+    }
   }
 
   void _navigateToEditTenant(TenantModel tenant) async {
@@ -328,11 +342,14 @@ class _TenantListScreenState extends State<TenantListScreen> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      child: InkWell(
+        onTap: () => _navigateToTenantDetails(tenant),
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             // Header with avatar and name
             Row(
               children: [
@@ -361,6 +378,24 @@ class _TenantListScreenState extends State<TenantListScreen> {
                           fontWeight: FontWeight.bold,
                           color: Colors.black87,
                         ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.phone,
+                            size: 14,
+                            color: Colors.grey[600],
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            tenant.phoneNumber,
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 4),
                       if (tenant.propertyName != null) ...[
@@ -439,28 +474,41 @@ class _TenantListScreenState extends State<TenantListScreen> {
             
             // Action buttons
             Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 TextButton.icon(
-                  onPressed: () => _navigateToEditTenant(tenant),
-                  icon: const Icon(Icons.edit, size: 18),
-                  label: const Text('Edit'),
+                  onPressed: () => _navigateToTenantDetails(tenant),
+                  icon: const Icon(Icons.visibility, size: 18),
+                  label: const Text('View Details'),
                   style: TextButton.styleFrom(
-                    foregroundColor: Colors.blue,
+                    foregroundColor: Colors.deepPurple,
                   ),
                 ),
-                const SizedBox(width: 8),
-                TextButton.icon(
-                  onPressed: () => _deleteTenant(tenant),
-                  icon: const Icon(Icons.delete, size: 18),
-                  label: const Text('Delete'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.red,
-                  ),
+                Row(
+                  children: [
+                    TextButton.icon(
+                      onPressed: () => _navigateToEditTenant(tenant),
+                      icon: const Icon(Icons.edit, size: 18),
+                      label: const Text('Edit'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.blue,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton.icon(
+                      onPressed: () => _deleteTenant(tenant),
+                      icon: const Icon(Icons.delete, size: 18),
+                      label: const Text('Delete'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.red,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );

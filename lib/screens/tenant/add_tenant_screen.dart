@@ -21,6 +21,7 @@ class _AddTenantScreenState extends State<AddTenantScreen> {
   
   // Controllers
   final _tenantNameController = TextEditingController();
+  final _phoneNumberController = TextEditingController();
   final _roomRentController = TextEditingController();
   final _waterBillController = TextEditingController();
   final _electricityUnitFeeController = TextEditingController();
@@ -98,6 +99,7 @@ class _AddTenantScreenState extends State<AddTenantScreen> {
   @override
   void dispose() {
     _tenantNameController.dispose();
+    _phoneNumberController.dispose();
     _roomRentController.dispose();
     _waterBillController.dispose();
     _electricityUnitFeeController.dispose();
@@ -130,6 +132,7 @@ class _AddTenantScreenState extends State<AddTenantScreen> {
       final tenant = TenantModel(
         id: '',
         tenantName: _tenantNameController.text.trim(),
+        phoneNumber: _phoneNumberController.text.trim(),
         roomRent: double.parse(_roomRentController.text.trim()),
         ownerId: '',
         propertyId: _selectedProperty?.id ?? (_properties.isNotEmpty ? _properties.first.id : null),
@@ -215,6 +218,27 @@ class _AddTenantScreenState extends State<AddTenantScreen> {
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Please enter tenant name';
+                    }
+                    return null;
+                  },
+                ),
+
+                // Phone Number
+                CustomTextField(
+                  controller: _phoneNumberController,
+                  hintText: 'Phone Number',
+                  prefixIcon: Icons.phone,
+                  keyboardType: TextInputType.phone,
+                  maxLength: 10,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                  ],
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter phone number';
+                    }
+                    if (value.length != 10) {
+                      return 'Phone number must be 10 digits';
                     }
                     return null;
                   },

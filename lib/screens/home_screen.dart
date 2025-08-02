@@ -7,6 +7,7 @@ import '../models/tenant_model.dart';
 import 'sign_in_screen.dart';
 import 'property/property_list_screen.dart';
 import 'tenant/tenant_list_screen.dart';
+import 'tenant/details/tenant_details_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -507,7 +508,7 @@ class _HomeScreenState extends State<HomeScreen> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => const TenantListScreen(),
+            builder: (context) => TenantDetailsScreen(tenant: tenant),
           ),
         ).then((_) => _loadData());
       },
