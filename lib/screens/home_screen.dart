@@ -108,7 +108,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: const Text(
-          'Rentify Dashboard',
+          'Rentify',
           style: TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
