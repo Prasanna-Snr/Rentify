@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/tenant_model.dart';
+import '../models/tenant_balance_model.dart';
 
 class TenantService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -43,12 +44,39 @@ class TenantService {
         createdAt: DateTime.now(),
       );
 
-      await _firestore
+      // Use batch to create tenant and initialize balance atomically
+      WriteBatch batch = _firestore.batch();
+
+      // Add tenant document
+      DocumentReference tenantRef = _firestore
+          .collection('users')
+          .doc(currentUserId)
+          .collection('tenants')
+          .doc(tenantId);
+      batch.set(tenantRef, newTenant.toMap());
+
+      // Initialize tenant balance
+      final balance = TenantBalanceModel(
+        id: 'current_balance',
+        tenantId: tenantId,
+        tenantName: newTenant.tenantName,
+        currentBalance: 0.0,
+        lastUpdated: DateTime.now(),
+        lastTransactionType: 'initialization',
+        lastTransactionId: null,
+      );
+
+      DocumentReference balanceRef = _firestore
           .collection('users')
           .doc(currentUserId)
           .collection('tenants')
           .doc(tenantId)
-          .set(newTenant.toMap());
+          .collection('tenant_balances')
+          .doc('current_balance');
+      batch.set(balanceRef, balance.toMap());
+
+      // Commit the batch
+      await batch.commit();
 
       return 'success';
     } catch (e) {
@@ -86,17 +114,72 @@ class TenantService {
     try {
       if (currentUserId == null) return 'User not authenticated';
 
-      await _firestore
+      // Use batch to delete tenant and all related data
+      WriteBatch batch = _firestore.batch();
+
+      // Delete tenant document
+      DocumentReference tenantRef = _firestore
+          .collection('users')
+          .doc(currentUserId)
+          .collection('tenants')
+          .doc(tenantId);
+      batch.delete(tenantRef);
+
+      // Delete tenant balance
+      DocumentReference balanceRef = _firestore
           .collection('users')
           .doc(currentUserId)
           .collection('tenants')
           .doc(tenantId)
-          .delete();
+          .collection('tenant_balances')
+          .doc('current_balance');
+      batch.delete(balanceRef);
+
+      // Note: Bills and payments subcollections will need to be deleted separately
+      // as Firestore doesn't cascade delete subcollections
+      
+      await batch.commit();
+
+      // Clean up subcollections (bills and payments)
+      await _deleteSubcollections(tenantId);
 
       return 'success';
     } catch (e) {
       print('Error deleting tenant: $e');
       return 'Failed to delete tenant: ${e.toString()}';
+    }
+  }
+
+  // Helper method to delete subcollections
+  Future<void> _deleteSubcollections(String tenantId) async {
+    try {
+      // Delete bills
+      final billsSnapshot = await _firestore
+          .collection('users')
+          .doc(currentUserId)
+          .collection('tenants')
+          .doc(tenantId)
+          .collection('bills')
+          .get();
+
+      for (final doc in billsSnapshot.docs) {
+        await doc.reference.delete();
+      }
+
+      // Delete payments
+      final paymentsSnapshot = await _firestore
+          .collection('users')
+          .doc(currentUserId)
+          .collection('tenants')
+          .doc(tenantId)
+          .collection('payments')
+          .get();
+
+      for (final doc in paymentsSnapshot.docs) {
+        await doc.reference.delete();
+      }
+    } catch (e) {
+      print('Error deleting subcollections: $e');
     }
   }
 

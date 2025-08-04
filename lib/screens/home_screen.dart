@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/property_service.dart';
 import '../services/tenant_service.dart';
+import '../services/billing_service.dart';
 import '../models/property_model.dart';
 import '../models/tenant_model.dart';
+import '../models/tenant_balance_model.dart';
 import 'sign_in_screen.dart';
 import 'property/property_list_screen.dart';
 import 'tenant/tenant_list_screen.dart';
@@ -16,10 +18,11 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final AuthService _authService = AuthService();
   final PropertyService _propertyService = PropertyService();
   final TenantService _tenantService = TenantService();
+  final BillingService _billingService = BillingService();
   Map<String, dynamic>? _userData;
   bool _isLoading = true;
 
@@ -31,26 +34,57 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadData();
+  }
+
+
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Refresh data when app comes back to foreground
+      _loadData();
+    }
   }
 
   // Load all data
   void _loadData() async {
-    // Load user data
-    Map<String, dynamic>? userData = await _authService.getUserData();
-
-    // Load properties from database
-    List<PropertyModel> properties = await _propertyService.getUserProperties();
-
-    // Load tenants from database
-    List<TenantModel> tenants = await _tenantService.getUserTenants();
-
     setState(() {
-      _userData = userData;
-      _properties = properties;
-      _tenants = tenants;
-      _isLoading = false;
+      _isLoading = true;
     });
+
+    try {
+      // Load user data
+      Map<String, dynamic>? userData = await _authService.getUserData();
+
+      // Load properties from database
+      List<PropertyModel> properties = await _propertyService.getUserProperties();
+
+      // Load tenants from database
+      List<TenantModel> tenants = await _tenantService.getUserTenants();
+
+      if (mounted) {
+        setState(() {
+          _userData = userData;
+          _properties = properties;
+          _tenants = tenants;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   // Sign out function
@@ -85,26 +119,33 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       drawer: _buildDrawer(),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Welcome Section
-              _buildWelcomeSection(),
-              const SizedBox(height: 30),
-              
-              
-              const SizedBox(height: 30),
+        child: RefreshIndicator(
+          onRefresh: () async {
+            await Future.delayed(const Duration(milliseconds: 500)); // Small delay for better UX
+            _loadData();
+          },
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(), // Enables pull-to-refresh even when content doesn't scroll
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Welcome Section
+                _buildWelcomeSection(),
+                const SizedBox(height: 30),
+                
+                
+                const SizedBox(height: 30),
 
-              // Tenant Management
-              _buildTenantManagement(),
-              const SizedBox(height: 30),
+                // Tenant Management
+                _buildTenantManagement(),
+                const SizedBox(height: 30),
 
-              // Quick Stats
-              _buildQuickStats(),
-              const SizedBox(height: 40), // Extra space at bottom for better scrolling
-            ],
+                // Quick Stats
+                _buildQuickStats(),
+                const SizedBox(height: 40), // Extra space at bottom for better scrolling
+              ],
+            ),
           ),
         ),
       ),
@@ -180,7 +221,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 MaterialPageRoute(
                   builder: (context) => const TenantListScreen(),
                 ),
-              );
+              ).then((_) => _loadData()); // Refresh data when returning
             },
           ),
           ListTile(
@@ -451,8 +492,64 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showSettings() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Settings'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.sync),
+              title: const Text('Migrate Tenant Balances'),
+              subtitle: const Text('Move balances to new structure'),
+              onTap: () => _migrateTenantBalances(),
+            ),
+            ListTile(
+              leading: const Icon(Icons.verified),
+              title: const Text('Verify Migration'),
+              subtitle: const Text('Check migration status'),
+              onTap: () => _verifyMigration(),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _migrateTenantBalances() async {
+    Navigator.pop(context); // Close settings dialog
+    
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Settings feature coming soon!')),
+      const SnackBar(content: Text('Starting migration...')),
+    );
+
+    final result = await _billingService.migrateTenantBalances();
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(result),
+        duration: const Duration(seconds: 5),
+      ),
+    );
+  }
+
+  void _verifyMigration() async {
+    Navigator.pop(context); // Close settings dialog
+    
+    final result = await _billingService.verifyMigration();
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(result),
+        duration: const Duration(seconds: 3),
+      ),
     );
   }
 
@@ -471,27 +568,29 @@ class _HomeScreenState extends State<HomeScreen> {
                 color: Colors.deepPurple,
               ),
             ),
-            TextButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const TenantListScreen(),
-                  ),
-                ).then((_) => _loadData());
-              },
-              child: const Text('View All'),
-            ),
+            // Show "View All" button only if there are more than 4 tenants
+            if (_tenants.length > 4)
+              TextButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const TenantListScreen(),
+                    ),
+                  ).then((_) => _loadData());
+                },
+                child: const Text('View All'),
+              ),
           ],
         ),
         const SizedBox(height: 12),
         SizedBox(
-          height: 180,
+          height: 220, // Increased height to accommodate balance status
           child: _tenants.isEmpty
               ? _buildEmptyTenantState()
               : ListView.builder(
             scrollDirection: Axis.horizontal,
-            itemCount: _tenants.length > 3 ? 3 : _tenants.length, // Show max 3 tenants
+            itemCount: _tenants.length > 4 ? 4 : _tenants.length, // Show max 4 tenants
             itemBuilder: (context, index) {
               final tenant = _tenants[index];
               return _buildTenantCard(tenant);
@@ -572,6 +671,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ],
               ),
+              
               // Monthly Room Rent
               Container(
                 width: double.infinity,

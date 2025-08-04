@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../../../models/tenant_model.dart';
 import '../../../../models/bill_model.dart';
 import '../../../../models/payment_model.dart';
+import '../../../../models/tenant_balance_model.dart';
 import '../../../../services/billing_service.dart';
 
 class PaymentHistorySection extends StatefulWidget {
@@ -20,7 +21,7 @@ class PaymentHistorySection extends StatefulWidget {
 class _PaymentHistorySectionState extends State<PaymentHistorySection> {
   final BillingService _billingService = BillingService();
   List<Map<String, dynamic>> _ledgerEntries = [];
-  List<BillModel> _unpaidBills = [];
+  TenantBalanceModel? _tenantBalance;
   bool _isLoading = false;
 
   @override
@@ -35,15 +36,16 @@ class _PaymentHistorySectionState extends State<PaymentHistorySection> {
     });
 
     final ledgerEntries = await _billingService.getTenantLedger(widget.tenant.id);
-    final bills = await _billingService.getTenantBills(widget.tenant.id);
-    final unpaidBills = bills.where((bill) => bill.status != 'Paid').toList();
+    final balance = await _billingService.getTenantBalance(widget.tenant.id);
 
     setState(() {
       _ledgerEntries = ledgerEntries;
-      _unpaidBills = unpaidBills;
+      _tenantBalance = balance;
       _isLoading = false;
     });
   }
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -63,46 +65,63 @@ class _PaymentHistorySectionState extends State<PaymentHistorySection> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
+                    color: Colors.deepPurple.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(
-                    Icons.account_balance_outlined,
-                    color: Colors.blue,
-                    size: 20,
+                    Icons.account_balance_wallet_outlined,
+                    color: Colors.deepPurple,
+                    size: 22,
                   ),
                 ),
                 const SizedBox(width: 12),
                 const Expanded(
-                  child: Text(
-                    'Payment Ledger',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Payment Records',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.deepPurple,
+                        ),
+                      ),
+                      Text(
+                        'Track all payments and bills',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 ElevatedButton.icon(
                   onPressed: () => _showAddPaymentDialog(),
-                  icon: const Icon(Icons.add, size: 16),
+                  icon: const Icon(Icons.add, size: 18),
                   label: const Text('Add Payment'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
+                    backgroundColor: Colors.deepPurple,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 2,
+                    shadowColor: Colors.deepPurple.withOpacity(0.3),
                   ),
                 ),
               ],
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             // Summary Cards
             _buildSummaryCards(),
-            
+
             const SizedBox(height: 16),
-            
+
             // Ledger Entries
             _isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -116,110 +135,162 @@ class _PaymentHistorySectionState extends State<PaymentHistorySection> {
   }
 
   Widget _buildSummaryCards() {
-    double totalPaid = 0;
-    double totalDue = 0;
-    double currentMonthPaid = 0;
+    double totalReceived = 0;
+    double currentBalance = _tenantBalance?.currentBalance ?? 0.0;
     
-    final now = DateTime.now();
-    
+    // Calculate total received from payments
     for (final entry in _ledgerEntries) {
       if (entry['type'] == 'payment') {
         final payment = entry['data'] as PaymentModel;
-        totalPaid += payment.amount;
-        
-        if (payment.paymentDate.year == now.year && 
-            payment.paymentDate.month == now.month) {
-          currentMonthPaid += payment.amount;
-        }
-      } else if (entry['type'] == 'bill') {
-        final bill = entry['data'] as BillModel;
-        if (bill.status != 'Paid') {
-          totalDue += bill.balanceAmount;
-        }
+        totalReceived += payment.amount;
       }
     }
 
-    return Row(
-      children: [
-        Expanded(
-          child: _buildSummaryCard(
-            title: 'This Month',
-            amount: currentMonthPaid,
-            color: Colors.green,
-            icon: Icons.calendar_today,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _buildSummaryCard(
-            title: 'Total Paid',
-            amount: totalPaid,
-            color: Colors.blue,
-            icon: Icons.account_balance_wallet,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _buildSummaryCard(
-            title: 'Total Due',
-            amount: totalDue,
-            color: Colors.red,
-            icon: Icons.warning,
-          ),
-        ),
-      ],
-    );
-  }
+    // Determine due and advance amounts from current balance
+    double totalDue = currentBalance > 0 ? currentBalance : 0.0;
+    double advanceAmount = currentBalance < 0 ? currentBalance.abs() : 0.0;
 
-  Widget _buildSummaryCard({
-    required String title,
-    required double amount,
-    required Color color,
-    required IconData icon,
-  }) {
     return Container(
-      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: color.withOpacity(0.2),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.deepPurple,
+            Colors.deepPurple.shade700,
+          ],
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                icon,
-                color: color,
-                size: 14,
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey[600],
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '₹${amount.toStringAsFixed(0)}',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.deepPurple.withOpacity(0.3),
+            spreadRadius: 1,
+            blurRadius: 12,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
+        child: Row(
+          children: [
+            // Receive Money Section
+            Expanded(
+              child: _buildMoneySection(
+                icon: Icons.account_balance_wallet,
+                title: 'Money\nReceived',
+                amount: totalReceived,
+                color: Colors.green.shade400,
+              ),
+            ),
+            
+            // Elegant Divider
+            Container(
+              width: 2,
+              height: 70,
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.white.withOpacity(0.2),
+                    Colors.white.withOpacity(0.8),
+                    Colors.white.withOpacity(0.2),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(1),
+              ),
+            ),
+            
+            // Pending Money Section
+            Expanded(
+              child: _buildMoneySection(
+                icon: Icons.schedule,
+                title: 'Amount\nPending',
+                amount: totalDue,
+                color: Colors.orange.shade400,
+              ),
+            ),
+            
+            // Elegant Divider
+            Container(
+              width: 2,
+              height: 70,
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.white.withOpacity(0.2),
+                    Colors.white.withOpacity(0.8),
+                    Colors.white.withOpacity(0.2),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(1),
+              ),
+            ),
+            
+            // Advance Money Section
+            Expanded(
+              child: _buildMoneySection(
+                icon: Icons.trending_up,
+                title: 'Advance\nPayment',
+                amount: advanceAmount,
+                color: Colors.blue.shade400,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
+
+  Widget _buildMoneySection({
+    required IconData icon,
+    required String title,
+    required double amount,
+    required Color color,
+  }) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(
+            icon,
+            color: color,
+            size: 24,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          title,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.9),
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            height: 1.3,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '₹${amount.toStringAsFixed(0)}',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.5,
+          ),
+        ),
+      ],
     );
   }
 
@@ -228,26 +299,40 @@ class _PaymentHistorySectionState extends State<PaymentHistorySection> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          'Transaction History',
+          'Recent Activity',
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
             color: Colors.black87,
           ),
         ),
+        const SizedBox(height: 4),
+        Text(
+          'Bills generated and payments received',
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey[600],
+          ),
+        ),
         const SizedBox(height: 12),
-        ..._ledgerEntries.take(10).map((entry) => _buildLedgerItem(entry)),
-        if (_ledgerEntries.length > 10) ...[
-          const SizedBox(height: 8),
+        // Show only first 4 entries (excluding balance entry if it exists)
+        ...(_ledgerEntries.where((entry) => entry['type'] != 'balance').take(4)).map((entry) => _buildLedgerItem(entry)),
+        if (_ledgerEntries.where((entry) => entry['type'] != 'balance').length > 4) ...[
+          const SizedBox(height: 12),
           Center(
-            child: TextButton(
+            child: TextButton.icon(
               onPressed: () => _showAllTransactions(),
-              child: Text(
-                'View All ${_ledgerEntries.length} Transactions',
+              icon: const Icon(Icons.history, size: 16),
+              label: Text(
+                'Show All ${_ledgerEntries.where((entry) => entry['type'] != 'balance').length} Records',
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                 ),
+              ),
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.deepPurple,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               ),
             ),
           ),
@@ -305,7 +390,7 @@ class _PaymentHistorySectionState extends State<PaymentHistorySection> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      description,
+                      _getSimpleDescription(description, isPayment),
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -327,11 +412,11 @@ class _PaymentHistorySectionState extends State<PaymentHistorySection> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '${isPayment ? '+' : '-'}₹${amount.toStringAsFixed(0)}',
+                    '${isPayment ? 'Received' : 'Bill'} ₹${amount.toStringAsFixed(0)}',
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: 14,
                       fontWeight: FontWeight.bold,
-                      color: isPayment ? Colors.green : Colors.red,
+                      color: isPayment ? Colors.green : Colors.orange,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -342,7 +427,7 @@ class _PaymentHistorySectionState extends State<PaymentHistorySection> {
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
-                      status,
+                      _getSimpleStatus(status),
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w600,
@@ -371,9 +456,9 @@ class _PaymentHistorySectionState extends State<PaymentHistorySection> {
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    balance > 0 
-                        ? 'Due: ₹${balance.toStringAsFixed(0)}'
-                        : 'Advance: ₹${(-balance).toStringAsFixed(0)}',
+                    balance > 0
+                        ? 'Still owes: ₹${balance.toStringAsFixed(0)}'
+                        : 'Extra paid: ₹${(-balance).toStringAsFixed(0)}',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -401,7 +486,7 @@ class _PaymentHistorySectionState extends State<PaymentHistorySection> {
           ),
           const SizedBox(height: 12),
           Text(
-            'No Transaction History',
+            'No Payment Records Yet',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w600,
@@ -410,11 +495,12 @@ class _PaymentHistorySectionState extends State<PaymentHistorySection> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Bills and payments will appear here',
+            'Generate bills and record payments to see activity here',
             style: TextStyle(
               fontSize: 14,
               color: Colors.grey[500],
             ),
+            textAlign: TextAlign.center,
           ),
         ],
       ),
@@ -426,44 +512,52 @@ class _PaymentHistorySectionState extends State<PaymentHistorySection> {
       context: context,
       builder: (context) => AddPaymentDialog(
         tenant: widget.tenant,
-        unpaidBills: _unpaidBills,
         onPaymentAdded: _loadLedgerData,
       ),
     );
   }
 
   void _showAllTransactions() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.8,
-        maxChildSize: 0.95,
-        minChildSize: 0.5,
-        builder: (context, scrollController) => Container(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              const Text(
-                'All Transactions',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: ListView.builder(
-                  controller: scrollController,
-                  itemCount: _ledgerEntries.length,
-                  itemBuilder: (context, index) => _buildLedgerItem(_ledgerEntries[index]),
-                ),
-              ),
-            ],
-          ),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AllPaymentHistoryScreen(
+          tenant: widget.tenant,
+          ledgerEntries: _ledgerEntries,
         ),
       ),
     );
+  }
+
+  String _getSimpleDescription(String description, bool isPayment) {
+    if (isPayment) {
+      return 'Payment Received';
+    } else {
+      // For bills, make it more understandable
+      if (description.contains('Bill for')) {
+        return description.replaceAll('Bill for', 'Monthly bill -');
+      }
+      return description;
+    }
+  }
+
+  String _getSimpleStatus(String status) {
+    switch (status.toLowerCase()) {
+      case 'paid':
+        return 'Completed';
+      case 'unpaid':
+        return 'Pending';
+      case 'partial':
+        return 'Partial';
+      case 'overdue':
+        return 'Overdue';
+      case 'due':
+        return 'Due';
+      case 'advance':
+        return 'Advance';
+      default:
+        return status;
+    }
   }
 
   Color _getEntryStatusColor(String status) {
@@ -488,13 +582,11 @@ class _PaymentHistorySectionState extends State<PaymentHistorySection> {
 
 class AddPaymentDialog extends StatefulWidget {
   final TenantModel tenant;
-  final List<BillModel> unpaidBills;
   final VoidCallback onPaymentAdded;
 
   const AddPaymentDialog({
     super.key,
     required this.tenant,
-    required this.unpaidBills,
     required this.onPaymentAdded,
   });
 
@@ -505,16 +597,15 @@ class AddPaymentDialog extends StatefulWidget {
 class _AddPaymentDialogState extends State<AddPaymentDialog> {
   final BillingService _billingService = BillingService();
   final _formKey = GlobalKey<FormState>();
-  
+
   final _amountController = TextEditingController();
   final _notesController = TextEditingController();
-  
+
   DateTime _paymentDate = DateTime.now();
   String _paymentType = 'Cash';
-  BillModel? _selectedBill;
   bool _isLoading = false;
 
-  final List<String> _paymentTypes = ['Cash', 'Bank Transfer', 'UPI', 'Cheque'];
+  final List<String> _paymentMethods = ['Cash', 'Bank Transfer', 'eSewa'];
 
   @override
   void dispose() {
@@ -535,7 +626,6 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
       amount: double.parse(_amountController.text),
       paymentType: _paymentType,
       paymentDate: _paymentDate,
-      billId: _selectedBill?.id,
       notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
     );
 
@@ -548,7 +638,7 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
       widget.onPaymentAdded();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Payment added successfully!'),
+          content: Text('Payment recorded successfully!'),
           backgroundColor: Colors.green,
         ),
       );
@@ -566,188 +656,507 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
   Widget build(BuildContext context) {
     return Dialog(
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Container(
-        width: MediaQuery.of(context).size.width * 0.9,
-        constraints: const BoxConstraints(maxHeight: 600),
-        padding: const EdgeInsets.all(20),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Add Payment for ${widget.tenant.displayName}',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blue,
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.8,
+          maxWidth: MediaQuery.of(context).size.width * 0.9,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Title
+                Text(
+                  'Add New Payment',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.deepPurple,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 20),
-              
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Payment Date
-                      ListTile(
-                        leading: const Icon(Icons.calendar_today),
-                        title: const Text('Payment Date'),
-                        subtitle: Text('${_paymentDate.day}/${_paymentDate.month}/${_paymentDate.year}'),
-                        onTap: () async {
-                          final date = await showDatePicker(
-                            context: context,
-                            initialDate: _paymentDate,
-                            firstDate: DateTime(2020),
-                            lastDate: DateTime.now(),
-                          );
-                          if (date != null) {
-                            setState(() {
-                              _paymentDate = date;
-                            });
-                          }
-                        },
-                      ),
-                      
-                      const SizedBox(height: 16),
-                      
-                      // Payment Amount
-                      TextFormField(
-                        controller: _amountController,
-                        decoration: const InputDecoration(
-                          labelText: 'Payment Amount (₹)',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.currency_rupee),
-                        ),
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please enter payment amount';
-                          }
-                          if (double.tryParse(value) == null || double.parse(value) <= 0) {
-                            return 'Please enter valid amount';
-                          }
-                          return null;
-                        },
-                      ),
-                      
-                      const SizedBox(height: 16),
-                      
-                      // Payment Type
-                      DropdownButtonFormField<String>(
-                        value: _paymentType,
-                        decoration: const InputDecoration(
-                          labelText: 'Payment Type',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.payment),
-                        ),
-                        items: _paymentTypes.map((type) {
-                          return DropdownMenuItem(
-                            value: type,
-                            child: Text(type),
-                          );
-                        }).toList(),
-                        onChanged: (value) {
-                          setState(() {
-                            _paymentType = value!;
-                          });
-                        },
-                      ),
-                      
-                      const SizedBox(height: 16),
-                      
-                      // Bill Selection (Optional)
-                      if (widget.unpaidBills.isNotEmpty) ...[
-                        DropdownButtonFormField<BillModel>(
-                          value: _selectedBill,
-                          decoration: const InputDecoration(
-                            labelText: 'Against Bill (Optional)',
-                            border: OutlineInputBorder(),
-                            prefixIcon: Icon(Icons.receipt),
+                Text(
+                  'From: ${widget.tenant.displayName}',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Scrollable content
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        // 1. Payment Date
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey),
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                          items: [
-                            const DropdownMenuItem<BillModel>(
-                              value: null,
-                              child: Text('General Payment'),
-                            ),
-                            ...widget.unpaidBills.map((bill) {
-                              return DropdownMenuItem<BillModel>(
-                                value: bill,
-                                child: Text(
-                                  '${bill.formattedBillMonth} - ₹${bill.balanceAmount.toStringAsFixed(0)} due',
-                                ),
+                          child: InkWell(
+                            onTap: () async {
+                              final date = await showDatePicker(
+                                context: context,
+                                initialDate: _paymentDate,
+                                firstDate: DateTime(2020),
+                                lastDate: DateTime.now(),
                               );
-                            }),
-                          ],
+                              if (date != null) {
+                                setState(() {
+                                  _paymentDate = date;
+                                });
+                              }
+                            },
+                            child: Row(
+                              children: [
+                                Icon(Icons.calendar_today, color: Colors.deepPurple),
+                                const SizedBox(width: 10),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Payment Date',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                    Text(
+                                      '${_paymentDate.day}/${_paymentDate.month}/${_paymentDate.year}',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // 2. Amount
+                        TextFormField(
+                          controller: _amountController,
+                          decoration: InputDecoration(
+                            labelText: 'Amount (₹)',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            prefixIcon: Icon(Icons.currency_rupee, color: Colors.deepPurple),
+                          ),
+                          keyboardType: TextInputType.number,
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Please enter amount';
+                            }
+                            if (double.tryParse(value) == null || double.parse(value) <= 0) {
+                              return 'Please enter valid amount';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 16),
+
+                        // 3. Payment Method Dropdown
+                        DropdownButtonFormField<String>(
+                          value: _paymentType,
+                          decoration: InputDecoration(
+                            labelText: 'Payment Method',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            prefixIcon: Icon(Icons.payment, color: Colors.deepPurple),
+                          ),
+                          items: _paymentMethods.map((method) {
+                            IconData icon;
+                            Color color;
+                            switch (method) {
+                              case 'Cash':
+                                icon = Icons.money;
+                                color = Colors.green;
+                                break;
+                              case 'Bank Transfer':
+                                icon = Icons.account_balance;
+                                color = Colors.blue;
+                                break;
+                              case 'eSewa':
+                                icon = Icons.phone_android;
+                                color = Colors.purple;
+                                break;
+                              default:
+                                icon = Icons.payment;
+                                color = Colors.grey;
+                            }
+                            return DropdownMenuItem<String>(
+                              value: method,
+                              child: Row(
+                                children: [
+                                  Icon(icon, color: color, size: 20),
+                                  const SizedBox(width: 10),
+                                  Text(method),
+                                ],
+                              ),
+                            );
+                          }).toList(),
                           onChanged: (value) {
                             setState(() {
-                              _selectedBill = value;
-                              if (value != null) {
-                                _amountController.text = value.balanceAmount.toStringAsFixed(0);
-                              }
+                              _paymentType = value!;
                             });
                           },
                         ),
                         const SizedBox(height: 16),
-                      ],
-                      
-                      // Notes
-                      TextFormField(
-                        controller: _notesController,
-                        decoration: const InputDecoration(
-                          labelText: 'Notes (Optional)',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.note),
+
+                        // 4. Notes (Optional)
+                        TextFormField(
+                          controller: _notesController,
+                          decoration: InputDecoration(
+                            labelText: 'Notes (Optional)',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            prefixIcon: Icon(Icons.note, color: Colors.deepPurple),
+                          ),
+                          maxLines: 2,
                         ),
-                        maxLines: 3,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              
-              const SizedBox(height: 20),
-              
-              // Action Buttons
-              Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel'),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _addPayment,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
+                ),
+
+                const SizedBox(height: 20),
+
+                // Buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: Text('Cancel'),
                       ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            )
-                          : const Text('Add Payment'),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _isLoading ? null : _addPayment,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.deepPurple,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: _isLoading
+                            ? CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                            : Text('Save Payment'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// All Payment History Screen
+class AllPaymentHistoryScreen extends StatelessWidget {
+  final TenantModel tenant;
+  final List<Map<String, dynamic>> ledgerEntries;
+
+  const AllPaymentHistoryScreen({
+    super.key,
+    required this.tenant,
+    required this.ledgerEntries,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Filter out balance entries for the main list
+    final filteredEntries = ledgerEntries.where((entry) => entry['type'] != 'balance').toList();
+    
+    return Scaffold(
+      backgroundColor: Colors.grey[50],
+      appBar: AppBar(
+        title: Text(
+          'Payment History',
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        backgroundColor: Colors.deepPurple,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: Column(
+        children: [
+          // Header info
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.deepPurple.withOpacity(0.1),
+                  Colors.blue.withOpacity(0.1),
+                ],
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  tenant.displayName,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.deepPurple,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Complete payment and billing history (${filteredEntries.length} records)',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // History list
+          Expanded(
+            child: filteredEntries.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.history,
+                          size: 64,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No History Found',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: filteredEntries.length,
+                    itemBuilder: (context, index) {
+                      final entry = filteredEntries[index];
+                      return _buildLedgerItem(entry);
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLedgerItem(Map<String, dynamic> entry) {
+    final isPayment = entry['type'] == 'payment';
+    final date = entry['date'] as DateTime;
+    final amount = entry['amount'] as double;
+    final status = entry['status'] as String;
+    final description = entry['description'] as String;
+    final balance = entry['balance'] as double;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: _getEntryStatusColor(status).withOpacity(0.3),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 2,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: _getEntryStatusColor(status).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(
+                  isPayment ? Icons.payment : Icons.receipt,
+                  color: _getEntryStatusColor(status),
+                  size: 16,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _getSimpleDescription(description, isPayment),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${date.day}/${date.month}/${date.year}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '${isPayment ? 'Received' : 'Bill'} ₹${amount.toStringAsFixed(0)}',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: isPayment ? Colors.green : Colors.orange,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: _getEntryStatusColor(status).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      _getSimpleStatus(status),
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: _getEntryStatusColor(status),
+                      ),
                     ),
                   ),
                 ],
               ),
             ],
           ),
-        ),
+          if (balance != 0) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: balance > 0 ? Colors.red.withOpacity(0.05) : Colors.blue.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    balance > 0 ? Icons.warning : Icons.account_balance_wallet,
+                    size: 14,
+                    color: balance > 0 ? Colors.red : Colors.blue,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    balance > 0
+                        ? 'Still owes: ₹${balance.toStringAsFixed(0)}'
+                        : 'Extra paid: ₹${(-balance).toStringAsFixed(0)}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: balance > 0 ? Colors.red : Colors.blue,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
       ),
     );
+  }
+
+  String _getSimpleDescription(String description, bool isPayment) {
+    if (isPayment) {
+      return 'Payment Received';
+    } else {
+      // For bills, make it more understandable
+      if (description.contains('Bill for')) {
+        return description.replaceAll('Bill for', 'Monthly bill -');
+      }
+      return description;
+    }
+  }
+
+  String _getSimpleStatus(String status) {
+    switch (status.toLowerCase()) {
+      case 'paid':
+        return 'Completed';
+      case 'unpaid':
+        return 'Pending';
+      case 'partial':
+        return 'Partial';
+      case 'overdue':
+        return 'Overdue';
+      case 'due':
+        return 'Due';
+      case 'advance':
+        return 'Advance';
+      default:
+        return status;
+    }
+  }
+
+  Color _getEntryStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'paid':
+        return Colors.green;
+      case 'unpaid':
+        return Colors.orange;
+      case 'partial':
+        return Colors.blue;
+      case 'overdue':
+        return Colors.red;
+      case 'due':
+        return Colors.red;
+      case 'advance':
+        return Colors.blue;
+      default:
+        return Colors.grey;
+    }
   }
 }

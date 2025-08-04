@@ -16,6 +16,9 @@ class BillModel {
   final bool includeElectricity;
   final double? electricityAmount;
   
+  // Carry-forward amount from previous bills/payments
+  final double carryForwardAmount; // Positive = Due, Negative = Advance
+  
   // Totals
   final double totalAmount;
   final String status; // "Unpaid", "Paid", "Partial", "Overdue"
@@ -38,6 +41,7 @@ class BillModel {
     this.garbageAmount,
     this.includeElectricity = false,
     this.electricityAmount,
+    this.carryForwardAmount = 0.0,
     required this.totalAmount,
     this.status = 'Unpaid',
     this.paidAmount = 0.0,
@@ -60,6 +64,7 @@ class BillModel {
       garbageAmount: map['garbageAmount']?.toDouble(),
       includeElectricity: map['includeElectricity'] ?? false,
       electricityAmount: map['electricityAmount']?.toDouble(),
+      carryForwardAmount: (map['carryForwardAmount'] ?? 0).toDouble(),
       totalAmount: (map['totalAmount'] ?? 0).toDouble(),
       status: map['status'] ?? 'Unpaid',
       paidAmount: (map['paidAmount'] ?? 0).toDouble(),
@@ -85,6 +90,7 @@ class BillModel {
       'garbageAmount': garbageAmount,
       'includeElectricity': includeElectricity,
       'electricityAmount': electricityAmount,
+      'carryForwardAmount': carryForwardAmount,
       'totalAmount': totalAmount,
       'status': status,
       'paidAmount': paidAmount,
@@ -107,6 +113,7 @@ class BillModel {
     double? garbageAmount,
     bool? includeElectricity,
     double? electricityAmount,
+    double? carryForwardAmount,
     double? totalAmount,
     String? status,
     double? paidAmount,
@@ -127,6 +134,7 @@ class BillModel {
       garbageAmount: garbageAmount ?? this.garbageAmount,
       includeElectricity: includeElectricity ?? this.includeElectricity,
       electricityAmount: electricityAmount ?? this.electricityAmount,
+      carryForwardAmount: carryForwardAmount ?? this.carryForwardAmount,
       totalAmount: totalAmount ?? this.totalAmount,
       status: status ?? this.status,
       paidAmount: paidAmount ?? this.paidAmount,
